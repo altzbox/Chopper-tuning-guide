@@ -1,5 +1,4 @@
 pandas>=2.1.4
-numpy>=1.26.3
 plotly>=5.18.0
-tqdm>=4.66.1
 natsort>=8.4.0
+tqdm>=4.66.1

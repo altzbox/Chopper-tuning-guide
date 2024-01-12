@@ -1,11 +1,10 @@
+import argparse
 import os
 import pandas as pd
-import numpy as np
-from tqdm import tqdm
-import argparse
 import plotly.express as px
 import plotly.offline as pyo
 from natsort import natsorted
+from tqdm import tqdm
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process CSV files and calculate median magnitudes.')
@@ -23,16 +22,23 @@ def parse_arguments():
     parser.add_argument('--min_speed', type=int, required=True, help='Minimum value for speed')
     parser.add_argument('--max_speed', type=int, required=True, help='Maximum value for speed')
     parser.add_argument('--iterations', type=int, default=1, help='Number of iterations for speed cycle')
+    parser.add_argument('--axis', type=str, default=1, help='Movement axis')
     return parser.parse_args()
 
-def calculate_static_measures(file_path, trim_percentage=0.2):
+def calculate_static_measures(file_path, axis):
     data = pd.read_csv(file_path, delimiter=',')
-    trim_size = int(trim_percentage * len(data))
-    trimmed_data = data.iloc[trim_size:-trim_size]
-    static_median_x = trimmed_data['accel_x'].median()
-    static_median_y = trimmed_data['accel_y'].median()
-    static_median_z = trimmed_data['accel_z'].median()
-    return static_median_x, static_median_y, static_median_z
+    trim_size_left = int(0.5 * len(data))
+    trim_size_right = int(0.1 * len(data))
+    trimmed_data = data.iloc[trim_size_left:-trim_size_right]
+
+    if axis.upper() == 'X':
+        static_median = trimmed_data['accel_x']
+    elif axis.upper() == 'Y':
+        static_median = trimmed_data['accel_y']
+    else:
+        static_median = trimmed_data['accel_z']
+
+    return abs(static_median.median())
 
 def main():
     args = parse_arguments()
@@ -57,18 +63,28 @@ def main():
         return
 
     results = []
-    static_median_x, static_median_y, static_median_z = calculate_static_measures(os.path.join(directory_path, 'adxl345-stand_still.csv'))
+    static_median = calculate_static_measures(os.path.join(directory_path, 'adxl345-stand_still.csv'), args.axis)
 
     for csv_file, parameters in tqdm(zip(csv_files, parameters_list), desc='Processing CSV files', total=len(csv_files)):
         file_path = os.path.join(directory_path, csv_file)
         data = pd.read_csv(file_path, delimiter=',')
-        data['accel_x'] -= static_median_x
-        data['accel_y'] -= static_median_y
-        data['accel_z'] -= static_median_z
-        trim_size = int(0.2 * len(data))
-        data = data.iloc[trim_size:-trim_size]
-        data['magnitude'] = np.sqrt(data['accel_x']**2 + data['accel_y']**2 + data['accel_z']**2)
-        median_magnitude = data['magnitude'].median()
+
+        trim_size_left = int(0.5 * len(data))
+        trim_size_right = int(0.1 * len(data))
+
+        data = data.iloc[trim_size_left:-trim_size_right]
+
+        if args.axis.upper() == 'X':
+            axis_data = data['accel_x']
+        elif args.axis.upper() == 'Y':
+            axis_data = data['accel_y']
+        else:
+            axis_data = data['accel_z']
+
+        axis_data = abs(axis_data)
+        axis_data -= static_median
+        median_magnitude = axis_data.median()
+
         current_toff = int(parameters.split('_')[2].split('=')[1])
         results.append({'file_name': csv_file, 'median_magnitude': median_magnitude, 'parameters': parameters, 'toff': current_toff})
 
